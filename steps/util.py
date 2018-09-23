@@ -89,6 +89,8 @@ def sampled_margin_rank_loss(image_outputs, audio_outputs, nframes, margin=1., s
     """
     Computes the triplet margin ranking loss for each anchor image/caption pair
     The impostor image/caption is randomly sampled from the minibatch
+    image_outputs: (batch, 1024, 14, 14)
+    audio_outputs: (batch, 1024, 128)
     """
     assert(image_outputs.dim() == 4)
     assert(audio_outputs.dim() == 3)
@@ -113,6 +115,38 @@ def sampled_margin_rank_loss(image_outputs, audio_outputs, nframes, margin=1., s
         if (I2A_simdif.data > 0).all():
             loss = loss + I2A_simdif
     loss = loss / n
+    return loss
+
+
+def sampled_margin_rank_loss_fast(image_outputs, audio_outputs, nframes, margin=1., simtype='MISA'):
+    """
+    Computes the triplet margin ranking loss for each anchor image/caption pair
+    The impostor image/caption is randomly sampled from the minibatch
+    image_outputs: (batch, 1024, 14, 14)
+    audio_outputs: (batch, 1024, 128)
+    """
+    assert(image_outputs.dim() == 4)
+    assert(audio_outputs.dim() == 3)
+    batch, img_channel, width, height  = image_outputs.shape
+    batch, audio_chennel, audio_len = audio_outputs.shape
+    loss = torch.zeros(1, device=image_outputs.device, requires_grad=True)
+    # (batch*width*height, batch*audio)
+    sim_map = torch.mm(
+        image_outputs.view(int(batch*width*height), img_channel),  # img_channel * (batch*width*height)
+        audio_outputs.view(int(batch*audio_len), audio_chennel).transpose(1,0) # (batch*audio_len)*audio_len
+    ).view(batch, int(width*height), batch, audio_len)
+    # (batch, batch)
+    if simtype == 'SISA':
+        sim_map = sim_map.mean(dim=1).mean(dim=-1)
+    elif simtype == 'MISA':
+        sim_map = sim_map.max(dim=1)[0].mean(-1)
+    elif simtype == 'SIMA':
+        sim_map = sim_map.mean(dim=1).max(-1)[0]
+    else:
+        raise ValueError
+    
+    loss = (sim_map.mean(dim=0) - sim_map.diag() + margin).mean() + (sim_map.mean(dim=1) - sim_map.diag() + margin).mean()
+
     return loss
 
 def compute_matchmap_similarity_matrix(image_outputs, audio_outputs, nframes, simtype='MISA'):

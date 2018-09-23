@@ -26,8 +26,8 @@ parser.add_argument("--resume", action="store_true", dest="resume",
         help="load from exp_dir if True")
 parser.add_argument("--optim", type=str, default="sgd",
         help="training optimizer", choices=["sgd", "adam"])
-parser.add_argument('-b', '--batch-size', default=100, type=int,
-    metavar='N', help='mini-batch size (default: 100)')
+parser.add_argument('-b', '--batch-size', default=64, type=int,
+    metavar='N', help='mini-batch size (default: 64)')
 parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
     metavar='LR', help='initial learning rate')
 parser.add_argument('--lr-decay', default=40, type=int, metavar='LRDECAY',

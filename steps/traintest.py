@@ -107,7 +107,7 @@ def train(audio_model, image_model, train_loader, test_loader, args):
             pooling_ratio = round(audio_input.size(-1) / audio_output.size(-1))
             nframes.div_(pooling_ratio)
 
-            loss = sampled_margin_rank_loss(image_output, audio_output,
+            loss = sampled_margin_rank_loss_fast(image_output, audio_output,
                 nframes, margin=args.margin, simtype=args.simtype)
 
             loss.backward()
