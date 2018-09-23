@@ -1,0 +1,1 @@
+python run.py train.json --data-val val.json --pretrained-image-model
