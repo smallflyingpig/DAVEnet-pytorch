@@ -2,6 +2,7 @@ import math
 import pickle
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 def calc_recalls(image_outputs, audio_outputs, nframes, simtype='MISA'):
     """
@@ -145,7 +146,9 @@ def sampled_margin_rank_loss_fast(image_outputs, audio_outputs, nframes, margin=
     else:
         raise ValueError
     
-    loss = (sim_map.mean(dim=0) - sim_map.diag() + margin).mean() + (sim_map.mean(dim=1) - sim_map.diag() + margin).mean()
+    loss1 = F.margin_ranking_loss(sim_map.diag(), sim_map.mean(dim=0), torch.ones(batch, device=image_outputs.device), margin=margin)
+    loss2 = F.margin_ranking_loss(sim_map.diag(), sim_map.mean(dim=1), torch.ones(batch, device=image_outputs.device), margin=margin)
+    loss = loss1 + loss2
 
     return loss
 
