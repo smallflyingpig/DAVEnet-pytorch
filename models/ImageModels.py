@@ -72,6 +72,7 @@ class Resnet50(imagemodels.ResNet):
 class VGG16(nn.Module):
     def __init__(self, embedding_dim=1024, pretrained=False):
         super(VGG16, self).__init__()
+        self.pretrained = pretrained
         seed_model = imagemodels.__dict__['vgg16'](pretrained=pretrained).features
         self.seed_model1 = nn.Sequential(*list(seed_model.children())[:-1]) # remove final maxpool
         last_layer_index = len(list(seed_model.children()))
@@ -81,7 +82,10 @@ class VGG16(nn.Module):
         # self.image_model = seed_model
 
     def forward(self, x):
-        with torch.autograd.no_grad():
+        if self.pretrained:
+            with torch.autograd.no_grad():
+                x = self.seed_model1(x)
+        else:
             x = self.seed_model1(x)
         x = self.seed_model2(x.requires_grad_())
         #x = self.image_model(x)
