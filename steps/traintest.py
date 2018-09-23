@@ -6,6 +6,9 @@ import numpy as np
 import pickle
 from .util import *
 
+import tqdm
+from tensorboardX import SummaryWriter
+
 def train(audio_model, image_model, train_loader, test_loader, args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.set_grad_enabled(True)
@@ -18,6 +21,7 @@ def train(audio_model, image_model, train_loader, test_loader, args):
     global_step, epoch = 0, 0
     start_time = time.time()
     exp_dir = args.exp_dir
+    writer = SummaryWriter(log_dir=exp_dir)
 
     def _save_progress():
         progress.append([epoch, global_step, best_epoch, best_acc, 
@@ -78,14 +82,18 @@ def train(audio_model, image_model, train_loader, test_loader, args):
 
     audio_model.train()
     image_model.train()
+    global_cnt = len(train_loader)*epoch
     while True:
         adjust_learning_rate(args.lr, args.lr_decay, optimizer, epoch)
         end_time = time.time()
         audio_model.train()
         image_model.train()
-        for i, (image_input, audio_input, nframes) in enumerate(train_loader):
+        loader_bar = tqdm.tqdm(train_loader)
+        for i, (image_input, audio_input, nframes) in enumerate(loader_bar):
+            global_cnt += 1
             # measure data loading time
-            data_time.update(time.time() - end_time)
+            data_time_this = time.time() - end_time
+            data_time.update(data_time_this)
             B = audio_input.size(0)
 
             audio_input = audio_input.to(device)
@@ -107,10 +115,18 @@ def train(audio_model, image_model, train_loader, test_loader, args):
 
             # record loss
             loss_meter.update(loss.item(), B)
-            batch_time.update(time.time() - end_time)
+            batch_time_this = time.time() - end_time
+            batch_time.update(batch_time_this)
+            writer.add_scalar(tag="loss", scalar_value=loss, global_step=global_cnt)
 
+            loader_bar.set_description('Epoch: [{0}]\t'
+                  'Batch {batch_time:.3f}\t'
+                  'Data {data_time:.3f}\t'
+                  'Loss {loss:.4f}'.format(
+                   epoch, batch_time=batch_time_this,
+                   data_time=data_time_this, loss=loss.cpu().item()))
             if global_step % args.n_print_steps == 0 and global_step != 0:
-                print('Epoch: [{0}][{1}/{2}]\t'
+                print('\nEpoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss total {loss_meter.val:.4f} ({loss_meter.avg:.4f})'.format(
@@ -126,6 +142,7 @@ def train(audio_model, image_model, train_loader, test_loader, args):
         recalls = validate(audio_model, image_model, test_loader, args)
         
         avg_acc = (recalls['A_r10'] + recalls['I_r10']) / 2
+        writer.add_scalar(tag="accu", scalar_value=avg_acc, global_step=global_cnt)
 
         torch.save(audio_model.state_dict(),
                 "%s/models/audio_model.%d.pth" % (exp_dir, epoch))
@@ -142,6 +159,7 @@ def train(audio_model, image_model, train_loader, test_loader, args):
                 "%s/models/best_image_model.pth" % (exp_dir))
         _save_progress()
         epoch += 1
+
 
 def validate(audio_model, image_model, val_loader, args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

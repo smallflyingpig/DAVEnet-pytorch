@@ -4,6 +4,8 @@ import os
 import pickle
 import sys
 import time
+import datetime
+import dateutil.tz
 import torch
 
 import dataloaders
@@ -73,9 +75,11 @@ image_model = models.VGG16(pretrained=args.pretrained_image_model)
 
 if not bool(args.exp_dir):
     print("exp_dir not specified, automatically creating one...")
-    args.exp_dir = "exp/Data-%s/AudioModel-%s_ImageModel-%s_Optim-%s_LR-%s_Epochs-%s" % (
+    now = datetime.datetime.now(dateutil.tz.tzlocal())
+    timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
+    args.exp_dir = "exp/Data-%s/AudioModel-%s_ImageModel-%s_Optim-%s_LR-%s_Epochs-%s_%s" % (
         os.path.basename(args.data_train), args.audio_model, args.image_model, args.optim,
-        args.lr, args.n_epochs)
+        args.lr, args.n_epochs, timestamp)
 
 if not args.resume:
     print("\nexp_dir: %s" % args.exp_dir)
