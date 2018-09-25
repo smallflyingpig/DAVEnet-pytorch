@@ -143,6 +143,8 @@ def train(audio_model, image_model, train_loader, test_loader, args):
             end_time = time.time()
             global_step += 1
 
+        loader_bar.close()
+        
         recalls = validate(audio_model, image_model, test_loader, args)
         
         avg_acc = (recalls['A_r10'] + recalls['I_r10']) / 2
