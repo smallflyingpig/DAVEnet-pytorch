@@ -210,7 +210,7 @@ def validate(audio_model, image_model, val_loader, args):
         audio_output = torch.cat(A_embeddings)
         nframes = torch.cat(frame_counts)
 
-        recalls = calc_recalls(image_output, audio_output, nframes, simtype=args.simtype, args.fast_flag)
+        recalls = calc_recalls(image_output, audio_output, nframes, simtype=args.simtype, fast_flag=args.fast_flag)
         A_r10 = recalls['A_r10']
         I_r10 = recalls['I_r10']
         A_r5 = recalls['A_r5']
