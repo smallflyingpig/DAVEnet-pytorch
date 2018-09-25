@@ -4,11 +4,15 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-def calc_recalls(image_outputs, audio_outputs, nframes, simtype='MISA'):
+def calc_recalls(image_outputs, audio_outputs, nframes, simtype='MISA', fast_flag=False):
     """
 	Computes recall at 1, 5, and 10 given encoded image and audio outputs.
 	"""
-    S = compute_matchmap_similarity_matrix(image_outputs, audio_outputs, nframes, simtype=simtype)
+    if fast_flag:
+        S = compute_matchmap_similarity_matrix_fast(image_outputs, audio_outputs, nframes, simtype=simtype)
+    else:
+        S = compute_matchmap_similarity_matrix(image_outputs, audio_outputs, nframes, simtype=simtype)
+
     n = S.size(0)
     A2I_scores, A2I_ind = S.topk(10, 0)
     I2A_scores, I2A_ind = S.topk(10, 1)
@@ -133,7 +137,7 @@ def sampled_margin_rank_loss_fast(image_outputs, audio_outputs, nframes, margin=
     loss = torch.zeros(1, device=image_outputs.device, requires_grad=True)
     # (batch*width*height, batch*audio)
     sim_map = torch.mm(
-        image_outputs.view(int(batch*width*height), img_channel),  # img_channel * (batch*width*height)
+        image_outputs.view(int(batch*width*height), img_channel),  # (batch*width*height)*img_channel
         audio_outputs.view(int(batch*audio_len), audio_chennel).transpose(1,0) # (batch*audio_len)*audio_len
     ).view(batch, int(width*height), batch, audio_len)
     # (batch, batch)
@@ -167,6 +171,33 @@ def compute_matchmap_similarity_matrix(image_outputs, audio_outputs, nframes, si
                 nF = max(1, nframes[audio_idx])
                 S[image_idx, audio_idx] = matchmapSim(computeMatchmap(image_outputs[image_idx], audio_outputs[audio_idx][:, 0:nF]), simtype)
     return S
+
+def compute_matchmap_similarity_matrix_fast(image_outputs, audio_outputs, nframes, simtype='MISA'):
+    """
+    Assumes image_outputs is a (batchsize, embedding_dim, rows, height) tensor
+    Assumes audio_outputs is a (batchsize, embedding_dim, 1, time) tensor
+    Returns similarity matrix S where images are rows and audios are along the columns
+    """
+    assert(image_outputs.dim() == 4)
+    assert(audio_outputs.dim() == 3)
+    batch, img_channel, width, height  = image_outputs.shape
+    batch, audio_chennel, audio_len = audio_outputs.shape
+    loss = torch.zeros(1, device=image_outputs.device, requires_grad=True)
+    # (batch*width*height, batch*audio)
+    sim_map = torch.mm(
+        image_outputs.view(int(batch*width*height), img_channel),  # (batch*width*height)*img_channel
+        audio_outputs.view(int(batch*audio_len), audio_chennel).transpose(1,0) # (batch*audio_len)*audio_len
+    ).view(batch, int(width*height), batch, audio_len)
+    # (batch, batch)
+    if simtype == 'SISA':
+        sim_map = sim_map.mean(dim=1).mean(dim=-1)
+    elif simtype == 'MISA':
+        sim_map = sim_map.max(dim=1)[0].mean(-1)
+    elif simtype == 'SIMA':
+        sim_map = sim_map.mean(dim=1).max(-1)[0]
+    else:
+        raise ValueError
+    return sim_map
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""

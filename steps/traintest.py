@@ -107,8 +107,12 @@ def train(audio_model, image_model, train_loader, test_loader, args):
             pooling_ratio = round(audio_input.size(-1) / audio_output.size(-1))
             nframes.div_(pooling_ratio)
 
-            loss = sampled_margin_rank_loss_fast(image_output, audio_output,
-                nframes, margin=args.margin, simtype=args.simtype)
+            if args.fast_flag:
+                loss = sampled_margin_rank_loss_fast(image_output, audio_output,
+                    nframes, margin=args.margin, simtype=args.simtype)
+            else:
+                loss = sampled_margin_rank_loss(image_output, audio_output,
+                    nframes, margin=args.margin, simtype=args.simtype)
 
             loss.backward()
             optimizer.step()
@@ -206,7 +210,7 @@ def validate(audio_model, image_model, val_loader, args):
         audio_output = torch.cat(A_embeddings)
         nframes = torch.cat(frame_counts)
 
-        recalls = calc_recalls(image_output, audio_output, nframes, simtype=args.simtype)
+        recalls = calc_recalls(image_output, audio_output, nframes, simtype=args.simtype, args.fast_flag)
         A_r10 = recalls['A_r10']
         I_r10 = recalls['I_r10']
         A_r5 = recalls['A_r5']
