@@ -101,8 +101,8 @@ def train(audio_model, image_model, train_loader, test_loader, args):
 
             optimizer.zero_grad()
 
-            audio_output = audio_model(audio_input)
-            image_output = image_model(image_input)
+            audio_output, sent_emb = audio_model(audio_input, nframes=nframes)
+            image_output, image_feature = image_model(image_input)
 
             pooling_ratio = round(audio_input.size(-1) / audio_output.size(-1))
             nframes.div_(pooling_ratio)
@@ -191,8 +191,8 @@ def validate(audio_model, image_model, val_loader, args):
             audio_input = audio_input.to(device)
 
             # compute output
-            image_output = image_model(image_input)
-            audio_output = audio_model(audio_input)
+            image_output, _ = image_model(image_input)
+            audio_output, _ = audio_model(audio_input)
 
             image_output = image_output.to('cpu').detach()
             audio_output = audio_output.to('cpu').detach()

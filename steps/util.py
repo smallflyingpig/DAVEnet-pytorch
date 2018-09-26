@@ -22,6 +22,7 @@ def calc_recalls(image_outputs, audio_outputs, nframes, simtype='MISA', fast_fla
     I_r1 = AverageMeter()
     I_r5 = AverageMeter()
     I_r10 = AverageMeter()
+
     for i in range(n):
         A_foundind = -1
         I_foundind = -1
@@ -134,7 +135,6 @@ def sampled_margin_rank_loss_fast(image_outputs, audio_outputs, nframes, margin=
     assert(audio_outputs.dim() == 3)
     batch, img_channel, width, height  = image_outputs.shape
     batch, audio_chennel, audio_len = audio_outputs.shape
-    loss = torch.zeros(1, device=image_outputs.device, requires_grad=True)
     # (batch*width*height, batch*audio)
     sim_map = torch.mm(
         image_outputs.view(int(batch*width*height), img_channel),  # (batch*width*height)*img_channel
@@ -149,6 +149,33 @@ def sampled_margin_rank_loss_fast(image_outputs, audio_outputs, nframes, margin=
         sim_map = sim_map.mean(dim=1).max(-1)[0]
     else:
         raise ValueError
+    
+    loss1 = F.margin_ranking_loss(sim_map.diag(), sim_map.mean(dim=0), torch.ones(batch, device=image_outputs.device), margin=margin)
+    loss2 = F.margin_ranking_loss(sim_map.diag(), sim_map.mean(dim=1), torch.ones(batch, device=image_outputs.device), margin=margin)
+    loss = loss1 + loss2
+
+    return loss
+
+
+def jointly_margin_rank_loss_fast(image_outputs, audio_outputs, margin=1.):
+    """
+    Computes the triplet margin ranking loss for each anchor image/caption pair
+    The impostor image/caption is randomly sampled from the minibatch
+    image_outputs: (batch, 1024, 14, 14)
+    audio_outputs: (batch, 1024, 128)
+    """
+    assert(image_outputs.dim() == 2)
+    assert(audio_outputs.dim() == 2)
+    batch, img_channel  = image_outputs.shape
+    batch, audio_channel = audio_outputs.shape
+    assert(img_channel==audio_channel)
+    
+    # (batch*width*height, batch*audio)
+    sim_map = torch.mm(
+        image_outputs,  # batch*img_channel
+        audio_outputs.transpose(1,0) # (batch)*audio_len
+    )  #
+    # (batch, batch)
     
     loss1 = F.margin_ranking_loss(sim_map.diag(), sim_map.mean(dim=0), torch.ones(batch, device=image_outputs.device), margin=margin)
     loss2 = F.margin_ranking_loss(sim_map.diag(), sim_map.mean(dim=1), torch.ones(batch, device=image_outputs.device), margin=margin)
