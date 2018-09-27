@@ -65,6 +65,67 @@ def calc_recalls(image_outputs, audio_outputs, nframes, simtype='MISA', fast_fla
 
     return recalls
 
+def calc_recalls_emb(image_emb, audio_emb):
+    """
+	Computes recall at 1, 5, and 10 given encoded image and audio outputs.
+	"""
+    S = torch.mm(
+        image_emb,  # (batch, emb_dim)
+        audio_emb.transpose(1,0)  # (batch, emb_dim)
+    )  # (batch, batch)
+
+    n = S.size(0)
+    A2I_scores, A2I_ind = S.topk(10, 0)
+    I2A_scores, I2A_ind = S.topk(10, 1)
+    A_r1 = AverageMeter()
+    A_r5 = AverageMeter()
+    A_r10 = AverageMeter()
+    I_r1 = AverageMeter()
+    I_r5 = AverageMeter()
+    I_r10 = AverageMeter()
+
+    for i in range(n):
+        A_foundind = -1
+        I_foundind = -1
+        for ind in range(10):
+            if A2I_ind[ind, i] == i:
+                I_foundind = ind
+            if I2A_ind[i, ind] == i:
+                A_foundind = ind
+        # do r1s
+        if A_foundind == 0:
+            A_r1.update(1)
+        else:
+            A_r1.update(0)
+        if I_foundind == 0:
+            I_r1.update(1)
+        else:
+            I_r1.update(0)
+        # do r5s
+        if A_foundind >= 0 and A_foundind < 5:
+            A_r5.update(1)
+        else:
+            A_r5.update(0)
+        if I_foundind >= 0 and I_foundind < 5:
+            I_r5.update(1)
+        else:
+            I_r5.update(0)
+        # do r10s
+        if A_foundind >= 0 and A_foundind < 10:
+            A_r10.update(1)
+        else:
+            A_r10.update(0)
+        if I_foundind >= 0 and I_foundind < 10:
+            I_r10.update(1)
+        else:
+            I_r10.update(0)
+
+    recalls = {'A_r1':A_r1.avg, 'A_r5':A_r5.avg, 'A_r10':A_r10.avg,
+                'I_r1':I_r1.avg, 'I_r5':I_r5.avg, 'I_r10':I_r10.avg}
+                #'A_meanR':A_meanR.avg, 'I_meanR':I_meanR.avg}
+
+    return recalls
+
 def computeMatchmap(I, A):
     assert(I.dim() == 3)
     assert(A.dim() == 2)

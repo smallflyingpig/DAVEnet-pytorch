@@ -30,30 +30,35 @@ class Davenet(nn.Module):
 
     def init_hidden(self, x):
         batch_size = x.shape[0]
-        rtn = (torch.zeros(self.rnn_layers, batch_size, self.embedding_dim, device=x.device),
-                torch.zeros(self.rnn_layers, batch_size, self.embedding_dim, device=x.device))
+        rtn = (torch.zeros(self.rnn_layers, batch_size, self.embedding_dim, device=x.device).requires_grad_(),
+                torch.zeros(self.rnn_layers, batch_size, self.embedding_dim, device=x.device).requires_grad_())
         
         return rtn 
         
     def forward(self, x, nframes):
         # (batch, channel, 40, seq_len)
+        pool_cnt = 0
         if x.dim() == 3:
             x = x.unsqueeze(1)
         x = self.batchnorm1(x)
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = self.pool(x)
+        pool_cnt += 1
         x = F.relu(self.conv3(x))
         x = self.pool(x)
+        pool_cnt += 1
         x = F.relu(self.conv4(x))
         x = self.pool(x)
+        pool_cnt += 1
         x = F.relu(self.conv5(x))
         x = self.pool(x)
+        pool_cnt += 1
         # (batch, channel, sel_len)
-        x = x.squeeze(2)
+        x = x.squeeze(2).transpose(1,2)
 
         self.h0 = self.init_hidden(x)
-        x_pad = pack_padded_sequence(x, nframes, batch_first=True)
+        x_pad = pack_padded_sequence(x, nframes/int(2**pool_cnt), batch_first=True)
         output, hidden = self.RNN(x_pad, self.h0)
         output = pad_packed_sequence(output, batch_first=True)[0]
         words_emb = output.transpose(1, 2)

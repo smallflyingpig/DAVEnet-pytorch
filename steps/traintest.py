@@ -5,12 +5,13 @@ import torch.nn as nn
 import numpy as np
 import pickle
 from .util import *
+from dataloaders.image_caption_dataset import sort_data
 
 import tqdm
 from tensorboardX import SummaryWriter
 
 def train(audio_model, image_model, train_loader, test_loader, args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if args.cuda else "cpu")
     torch.set_grad_enabled(True)
     # Initialize all of the statistics we want to keep track of
     batch_time = AverageMeter()
@@ -39,10 +40,10 @@ def train(audio_model, image_model, train_loader, test_loader, args):
         print("  best_epoch = %s" % best_epoch)
         print("  best_acc = %.4f" % best_acc)
 
-    if not isinstance(audio_model, torch.nn.DataParallel):
+    if args.cuda and (not isinstance(audio_model, torch.nn.DataParallel)):
         audio_model = nn.DataParallel(audio_model)
 
-    if not isinstance(image_model, torch.nn.DataParallel):
+    if args.cuda and (not isinstance(image_model, torch.nn.DataParallel)):
         image_model = nn.DataParallel(image_model)
 
     if epoch != 0:
@@ -83,17 +84,21 @@ def train(audio_model, image_model, train_loader, test_loader, args):
     audio_model.train()
     image_model.train()
     global_cnt = len(train_loader)*epoch
+    recalls = validate(audio_model, image_model, test_loader, args)
     while True:
         adjust_learning_rate(args.lr, args.lr_decay, optimizer, epoch)
         end_time = time.time()
         audio_model.train()
         image_model.train()
-        loader_bar = tqdm.tqdm(train_loader)
-        for i, (image_input, audio_input, nframes) in enumerate(loader_bar):
+        loader_bar = tqdm.tqdm(train_loader, ncols=100)
+        for i, data in enumerate(loader_bar):
             global_cnt += 1
             # measure data loading time
             data_time_this = time.time() - end_time
             data_time.update(data_time_this)
+            data = sort_data(data, key_idx=2, descending=True)
+            (image_input, audio_input, nframes) = data
+
             B = audio_input.size(0)
 
             audio_input = audio_input.to(device)
@@ -102,18 +107,19 @@ def train(audio_model, image_model, train_loader, test_loader, args):
             optimizer.zero_grad()
 
             audio_output, sent_emb = audio_model(audio_input, nframes=nframes)
-            image_output, image_feature = image_model(image_input)
+            image_output, image_emb = image_model(image_input)
 
             pooling_ratio = round(audio_input.size(-1) / audio_output.size(-1))
             nframes.div_(pooling_ratio)
 
-            if args.fast_flag:
-                loss = sampled_margin_rank_loss_fast(image_output, audio_output,
-                    nframes, margin=args.margin, simtype=args.simtype)
-            else:
-                loss = sampled_margin_rank_loss(image_output, audio_output,
-                    nframes, margin=args.margin, simtype=args.simtype)
+            #if args.fast_flag:
+            #    loss = sampled_margin_rank_loss_fast(image_output, audio_output,
+            #        nframes, margin=args.margin, simtype=args.simtype)
+            #else:
+            #    loss = sampled_margin_rank_loss(image_output, audio_output,
+            #        nframes, margin=args.margin, simtype=args.simtype)
 
+            loss = jointly_margin_rank_loss_fast(image_emb, sent_emb, margin=args.margin)
             loss.backward()
             optimizer.step()
 
@@ -168,11 +174,11 @@ def train(audio_model, image_model, train_loader, test_loader, args):
 
 
 def validate(audio_model, image_model, val_loader, args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if args.cuda else "cpu")
     batch_time = AverageMeter()
-    if not isinstance(audio_model, torch.nn.DataParallel):
+    if args.cuda and (not isinstance(audio_model, torch.nn.DataParallel)):
         audio_model = nn.DataParallel(audio_model)
-    if not isinstance(image_model, torch.nn.DataParallel):
+    if args.cuda and (not isinstance(image_model, torch.nn.DataParallel)):
         image_model = nn.DataParallel(image_model)
     audio_model = audio_model.to(device)
     image_model = image_model.to(device)
@@ -186,19 +192,24 @@ def validate(audio_model, image_model, val_loader, args):
     A_embeddings = [] 
     frame_counts = []
     with torch.no_grad():
-        for i, (image_input, audio_input, nframes) in enumerate(val_loader):
+        for i, data in enumerate(val_loader):
+            data = sort_data(data, key_idx=2, descending=True)
+            (image_input, audio_input, nframes) = data
             image_input = image_input.to(device)
             audio_input = audio_input.to(device)
-
+            
             # compute output
-            image_output, _ = image_model(image_input)
-            audio_output, _ = audio_model(audio_input)
+            image_output, image_emb = image_model(image_input)
+            audio_output, sent_emb = audio_model(audio_input, nframes)
 
             image_output = image_output.to('cpu').detach()
             audio_output = audio_output.to('cpu').detach()
 
-            I_embeddings.append(image_output)
-            A_embeddings.append(audio_output)
+            # I_embeddings.append(image_output)
+            # A_embeddings.append(audio_output)
+
+            I_embeddings.append(image_emb)
+            A_embeddings.append(sent_emb)
             
             pooling_ratio = round(audio_input.size(-1) / audio_output.size(-1))
             nframes.div_(pooling_ratio)
@@ -212,7 +223,8 @@ def validate(audio_model, image_model, val_loader, args):
         audio_output = torch.cat(A_embeddings)
         nframes = torch.cat(frame_counts)
 
-        recalls = calc_recalls(image_output, audio_output, nframes, simtype=args.simtype, fast_flag=args.fast_flag)
+        #recalls = calc_recalls(image_output, audio_output, nframes, simtype=args.simtype, fast_flag=args.fast_flag)
+        recalls = calc_recalls_emb(image_output, audio_output)
         A_r10 = recalls['A_r10']
         I_r10 = recalls['I_r10']
         A_r5 = recalls['A_r5']

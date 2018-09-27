@@ -11,6 +11,15 @@ import torch.nn.functional
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 
+
+def sort_data(data, key_idx=int(-1), descending=False):
+    key = data[key_idx]
+    key_sort, sort_idx  = torch.sort(key, descending=descending)
+    data = [data_temp[sort_idx] for data_temp in data]
+    return data
+
+
+
 def preemphasis(signal,coeff=0.97):
     """perform preemphasis on the input signal.
     

@@ -73,28 +73,29 @@ class VGG16(nn.Module):
     def __init__(self, embedding_dim=1024, pretrained=False):
         super(VGG16, self).__init__()
         self.pretrained = pretrained
-        seed_model = imagemodels.__dict__['vgg16'](pretrained=pretrained).features
-        self.seed_model1 = nn.Sequential(*list(seed_model.children())[:-1]) # remove final maxpool
-        last_layer_index = len(list(seed_model.children()))
+        self.seed_model = imagemodels.__dict__['vgg16'](pretrained=pretrained).features
+        self.seed_model1 = nn.Sequential(*list(self.seed_model.children())[:-1]) # remove final maxpool
+        last_layer_index = len(list(self.seed_model.children()))
         self.seed_model2 = nn.Sequential()
         self.seed_model2.add_module(str(last_layer_index),
             nn.Conv2d(512, embedding_dim, kernel_size=(3,3), stride=(1,1), padding=(1,1)))
         # self.image_model = seed_model
         self.global_layer = nn.Sequential(
-            nn.ReLU(True),
-            nn.Conv2d(512, 1024, 3,2,0, bias=True),
-            nn.AvgPool2d(3)
+            nn.MaxPool2d(2, 2, 0),
+            nn.Conv2d(1024, 1024, 3,2,0, bias=True),
+            nn.AvgPool2d(3, stride=3)
         )
 
     def forward(self, x):
-        # (512, 7, 7)
+        # (512, 14, 14)
         if self.pretrained:
             with torch.autograd.no_grad():
                 x = self.seed_model1(x)
         else:
             x = self.seed_model1(x)
         x = self.seed_model2(x.requires_grad_())
-        feature = self.global_layer(x)
+        feature = self.global_layer(x).squeeze()
+        
 
         #x = self.image_model(x)
         return x, feature

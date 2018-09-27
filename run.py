@@ -46,13 +46,17 @@ parser.add_argument("--audio-model", type=str, default="Davenet",
         help="audio model architecture", choices=["Davenet"])
 parser.add_argument("--image-model", type=str, default="VGG16",
         help="image model architecture", choices=["VGG16"])
-parser.add_argument("--pretrained-image-model", action="store_true",
+parser.add_argument("--pretrained-image-model", action="store_true", default=False,
     dest="pretrained_image_model", help="Use an image network pretrained on ImageNet")
 parser.add_argument("--margin", type=float, default=1.0, help="Margin paramater for triplet loss")
 parser.add_argument("--simtype", type=str, default="MISA",
         help="matchmap similarity function", choices=["SISA", "MISA", "SIMA"])
+parser.add_argument("--no_cuda", action="store_true", default=False,
+    help="when set, disable the cuda")        
 
 args = parser.parse_args()
+
+args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 resume = args.resume
 
@@ -64,13 +68,14 @@ args.resume = resume
         
 print(args)
 
+para = {"num_workers":8, "pin_memory":True} if args.cuda else {}
 train_loader = torch.utils.data.DataLoader(
     dataloaders.ImageCaptionDataset(args.data_train),
-    batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True)
+    batch_size=args.batch_size, shuffle=True, **para)
 
 val_loader = torch.utils.data.DataLoader(
     dataloaders.ImageCaptionDataset(args.data_val, image_conf={'center_crop':True}),
-    batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=True)
+    batch_size=args.batch_size, shuffle=False, **para)
 
 audio_model = models.Davenet()
 image_model = models.VGG16(pretrained=args.pretrained_image_model)
