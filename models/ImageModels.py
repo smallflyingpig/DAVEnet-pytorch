@@ -75,6 +75,12 @@ class VGG16(nn.Module):
         self.pretrained = pretrained
         self.seed_model = imagemodels.__dict__['vgg16'](pretrained=pretrained).features
         self.seed_model1 = nn.Sequential(*list(self.seed_model.children())[:-1]) # remove final maxpool
+        if pretrained:
+            for param in self.seed_model.parameters():
+                param.requires_grad_(False)
+            for param in self.seed_model1.parameters():
+                param.requires_grad_(False)
+                
         last_layer_index = len(list(self.seed_model.children()))
         self.seed_model2 = nn.Sequential()
         self.seed_model2.add_module(str(last_layer_index),
